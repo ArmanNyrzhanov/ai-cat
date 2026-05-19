@@ -180,16 +180,82 @@ async def handle_voice(update: Update,
         )
 
 # =====================================================
-# PHOTO
+# PHOTO / VISION
 # =====================================================
 
 async def handle_photo(update: Update,
                        context: ContextTypes.DEFAULT_TYPE):
 
-    await update.message.reply_text(
-        "👁 Анализ изображений скоро подключим"
-    )
+    try:
 
+        await update.message.chat.send_action("typing")
+
+        photo = update.message.photo[-1]
+
+        file = await photo.get_file()
+
+        temp_img = tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".jpg"
+        )
+
+        await file.download_to_drive(temp_img.name)
+
+        # ============================================
+        # UPLOAD IMAGE TO OPENAI
+        # ============================================
+
+        uploaded = client.files.create(
+            file=open(temp_img.name, "rb"),
+            purpose="vision"
+        )
+
+        # ============================================
+        # GPT VISION
+        # ============================================
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content":
+                    "Ты технический AI помощник. "
+                    "Подробно анализируй изображения."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text":
+                            "Проанализируй это изображение подробно"
+                        },
+                        {
+                            "type": "image_file",
+                            "image_file": {
+                                "file_id": uploaded.id
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=1000
+        )
+
+        answer = response.choices[0].message.content
+
+        await update.message.reply_text(answer)
+
+        os.remove(temp_img.name)
+
+    except Exception as e:
+
+        print("VISION ERROR:", e)
+
+        await update.message.reply_text(
+            f"Ошибка vision: {e}"
+        )
 # =====================================================
 # APP
 # =====================================================

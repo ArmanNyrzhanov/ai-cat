@@ -4,3 +4,4 @@ requests
 pillow
 pydub
 ffmpeg-python
+base64io
