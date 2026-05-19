@@ -1,5 +1,6 @@
 import os
 import asyncio
+import tempfile
 
 from openai import OpenAI
 
@@ -11,14 +12,18 @@ from telegram.ext import (
     filters
 )
 
-# ===== TOKENS =====
+# =====================================================
+# TOKENS
+# =====================================================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_KEY = os.getenv("OPENAI_KEY")
 
 client = OpenAI(api_key=OPENAI_KEY)
 
-# ===== MEMORY =====
+# =====================================================
+# MEMORY
+# =====================================================
 
 memory = {}
 
@@ -31,10 +36,14 @@ SYSTEM_PROMPT = """
 - технически грамотный
 - помогаешь с электроникой
 - помогаешь с ремонтом техники
+- можешь анализировать проблемы
 - отвечаешь естественно
+- помнишь контекст разговора
 """
 
-# ===== GPT =====
+# =====================================================
+# GPT
+# =====================================================
 
 async def ask_gpt(user_id, text):
 
@@ -67,7 +76,9 @@ async def ask_gpt(user_id, text):
 
     return answer
 
-# ===== TEXT =====
+# =====================================================
+# TEXT
+# =====================================================
 
 async def handle_text(update: Update,
                       context: ContextTypes.DEFAULT_TYPE):
@@ -81,17 +92,131 @@ async def handle_text(update: Update,
 
     await update.message.reply_text(answer)
 
-# ===== START =====
+# =====================================================
+# VOICE
+# =====================================================
+
+async def handle_voice(update: Update,
+                       context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.effective_user.id
+
+    await update.message.chat.send_action("record_voice")
+
+    try:
+
+        # ============================================
+        # DOWNLOAD VOICE
+        # ============================================
+
+        voice = await update.message.voice.get_file()
+
+        temp_ogg = tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".ogg"
+        )
+
+        await voice.download_to_drive(temp_ogg.name)
+
+        # ============================================
+        # SPEECH TO TEXT
+        # ============================================
+
+        with open(temp_ogg.name, "rb") as audio:
+
+            transcript = client.audio.transcriptions.create(
+                model="gpt-4o-mini-transcribe",
+                file=audio
+            )
+
+        text = transcript.text
+
+        print("VOICE:", text)
+
+        # ============================================
+        # GPT
+        # ============================================
+
+        answer = await ask_gpt(user_id, text)
+
+        # ============================================
+        # TEXT TO SPEECH
+        # ============================================
+
+        speech = client.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=answer
+        )
+
+        temp_mp3 = tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".mp3"
+        )
+
+        speech.stream_to_file(temp_mp3.name)
+
+        # ============================================
+        # SEND VOICE
+        # ============================================
+
+        with open(temp_mp3.name, "rb") as audio:
+
+            await update.message.reply_voice(audio)
+
+        # ============================================
+        # CLEANUP
+        # ============================================
+
+        os.remove(temp_ogg.name)
+        os.remove(temp_mp3.name)
+
+    except Exception as e:
+
+        print("VOICE ERROR:", e)
+
+        await update.message.reply_text(
+            f"Ошибка voice: {e}"
+        )
+
+# =====================================================
+# PHOTO
+# =====================================================
+
+async def handle_photo(update: Update,
+                       context: ContextTypes.DEFAULT_TYPE):
+
+    await update.message.reply_text(
+        "👁 Анализ изображений скоро подключим"
+    )
+
+# =====================================================
+# APP
+# =====================================================
 
 app = ApplicationBuilder().token(
     TELEGRAM_TOKEN
 ).build()
 
+# =====================================================
+# HANDLERS
+# =====================================================
+
 app.add_handler(
     MessageHandler(filters.TEXT, handle_text)
 )
 
-# ===== MAIN =====
+app.add_handler(
+    MessageHandler(filters.VOICE, handle_voice)
+)
+
+app.add_handler(
+    MessageHandler(filters.PHOTO, handle_photo)
+)
+
+# =====================================================
+# MAIN
+# =====================================================
 
 async def main():
 
