@@ -202,13 +202,15 @@ async def handle_photo(update: Update,
         await file.download_to_drive(temp_img.name)
 
         # ============================================
-        # UPLOAD IMAGE TO OPENAI
+        # READ IMAGE
         # ============================================
 
-        uploaded = client.files.create(
-            file=open(temp_img.name, "rb"),
-            purpose="vision"
-        )
+        import base64
+
+        with open(temp_img.name, "rb") as image_file:
+            base64_image = base64.b64encode(
+                image_file.read()
+            ).decode("utf-8")
 
         # ============================================
         # GPT VISION
@@ -232,9 +234,10 @@ async def handle_photo(update: Update,
                             "Проанализируй это изображение подробно"
                         },
                         {
-                            "type": "image_file",
-                            "image_file": {
-                                "file_id": uploaded.id
+                            "type": "image_url",
+                            "image_url": {
+                                "url":
+                                f"data:image/jpeg;base64,{base64_image}"
                             }
                         }
                     ]
