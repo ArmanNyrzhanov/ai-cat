@@ -1,5 +1,6 @@
 python-telegram-bot
 openai
-flask
-pillow
 requests
+pillow
+pydub
+ffmpeg-python
